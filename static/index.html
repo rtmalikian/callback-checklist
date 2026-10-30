@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Callback Checklist — post-discharge callback safety net (proof of concept)</title>
+<style>body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem;line-height:1.5}
+.warn{border:3px solid #b00020;padding:1rem;background:#fff5f5}
+button{padding:.6rem 1rem;margin:.25rem;cursor:pointer}
+pre{white-space:pre-wrap;background:#f4f4f4;padding:1rem;overflow:auto}
+table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.3rem .6rem;text-align:left}</style></head>
+<body>
+<div class="warn"><strong>PROOF OF CONCEPT — NOT CLINICALLY TESTED.</strong>
+This tool has not been tested clinically and is a proof-of-concept for research
+and software demonstration only. It is not a medical device, it does not diagnose,
+treat, or rule out any condition, and its outputs may be wrong, including false
+positives and false negatives. Do not use it to make decisions about your health.
+For any medical issue, seek a licensed healthcare professional. In an emergency,
+go to your nearest emergency room or dial 911 immediately.</div>
+<h1>Callback Checklist</h1>
+<p>A post-discharge callback built as a finite-state checklist, not a chatbot.
+The discharge summary is compiled once into 5 to 8 fixed questions. A simulated
+patient answers; a small local grammar fills the answer slots; a red-flag answer
+or two answers the machine cannot understand creates one escalation task for a
+human. <strong>Simulated calls only:</strong> no telephone network is connected
+in this demo. Real telephony is a documented integration, not part of v0.1.0.</p>
+<p><strong>What it never does:</strong> it never interprets an answer into a
+diagnosis, never gives treatment advice, and never claims to reduce readmissions.
+The evidence for a single automated contact doing that is not there (see
+EVIDENCE.md in the repo). It asks, it records, it escalates.</p>
+<label>Discharge summary:
+<select id="summary"></select></label>
+<label>Simulated patient:
+<select id="persona"></select></label>
+<label>Tier:
+<select id="tier"><option value="frugal">frugal</option><option value="full">full</option></select></label>
+<button onclick="run()">Run simulated call</button>
+<div id="out">Press the button to run a simulated call.</div>
+<script>
+async function load(){
+  const r=await fetch('/api/demo/summaries'); const j=await r.json();
+  const s=document.getElementById('summary');
+  for(const k of Object.keys(j.summaries)){const o=document.createElement('option');o.value=j.summaries[k];o.textContent=k;s.appendChild(o);}
+  const p=document.getElementById('persona');
+  for(const name of j.personas){const o=document.createElement('option');o.value=name;o.textContent=name;p.appendChild(o);}
+}
+async function run(){
+  const body={discharge_summary:document.getElementById('summary').value,
+              persona:document.getElementById('persona').value};
+  const r=await fetch('/api/calls/simulate',{method:'POST',
+    headers:{'Content-Type':'application/json','X-Tier':document.getElementById('tier').value},
+    body:JSON.stringify(body)});
+  const j=await r.json();
+  let rows='';
+  for(const [slot,rec] of Object.entries(j.answers)){
+    rows+='<tr><td>'+slot+'</td><td>'+rec.status+'</td><td>'+(rec.value===null?'':rec.value)+'</td></tr>';
+  }
+  let t='';
+  for(const e of j.transcript){t+='Q ['+e.slot+']: '+e.prompt+'\nA: '+e.utterance+'  ->  '+e.extracted.status+(e.extracted.value===null?'':' = '+e.extracted.value)+'\n';}
+  document.getElementById('out').innerHTML =
+    '<p>State: '+j.state+' &nbsp; Tier: '+j.tier+' &nbsp; Model (chat) calls this call: '+j.llm_chat_calls+
+    ' &nbsp; No-answers: '+j.non_answers+(j.escalation?' &nbsp; Escalation reason: '+j.escalation.reason:'')+'</p>'+
+    '<table><tr><th>Slot</th><th>Status</th><th>Value</th></tr>'+rows+'</table>'+
+    '<h3>Transcript (simulated)</h3><pre>'+t+'</pre>'+
+    '<h3>End-of-call note</h3><pre>'+(j.note||'')+'</pre>';
+}
+load();
+</script>
+</body></html>
